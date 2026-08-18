@@ -1,0 +1,12 @@
+# How the platform deploys this repository.
+#
+# The migrator is named, not described: the platform looks the executable and
+# the argv up from a table in its own code, so nothing written here can become a
+# command. An argv outside the permitted set is a rejected deploy, never a
+# different command.
+
+version = "0.1"
+
+[migrate]
+migrator = "alembic"
+argv = ["upgrade", "head"]

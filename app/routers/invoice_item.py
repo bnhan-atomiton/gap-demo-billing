@@ -1,0 +1,125 @@
+"""CRUD routes for `invoice_items`."""
+
+from __future__ import annotations
+
+from typing import Annotated, Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.db import session
+from app.models.invoice_item import InvoiceItem
+from app.schemas.invoice_item import InvoiceItemCreate, InvoiceItemRead, InvoiceItemUpdate
+from app.schemas.page import Page
+
+router = APIRouter(
+    prefix="/invoice_items",
+    tags=["invoice_items"],
+)
+
+#: The columns `?order_by=` will accept, spelled as a type rather than checked in
+#: the handler. An unknown value is then a 422 from validation before any code
+#: here runs, and `getattr` below can only ever reach a real mapped column — the
+#: value never becomes part of a query string.
+OrderBy = Literal[
+    "id",
+    "invoice_id",
+    "description",
+    "qty",
+    "unit_cents",
+]
+
+DbSession = Annotated[Session, Depends(session)]
+
+_NOT_FOUND = {
+    status.HTTP_404_NOT_FOUND: {"description": "No such invoice_item"},
+}
+
+
+def _get(db: Session, row_id: UUID) -> InvoiceItem:
+    row = db.get(InvoiceItem, row_id)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=f"no invoice_item with id {row_id}",
+        )
+    return row
+
+
+@router.get("")
+def list_invoice_items(
+    db: DbSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    order_by: OrderBy = "id",
+    order: Literal["asc", "desc"] = "asc",
+) -> Page[InvoiceItemRead]:
+    """One page of rows.
+
+    Ordered explicitly, and by the primary key unless asked otherwise: without an
+    `ORDER BY` a `LIMIT`/`OFFSET` pair is free to return the same row on two
+    consecutive pages and skip another entirely.
+    """
+    column = getattr(InvoiceItem, order_by)
+    ordering = column.desc() if order == "desc" else column.asc()
+    statement = select(InvoiceItem).order_by(ordering)
+    rows = db.scalars(statement.limit(limit).offset(offset)).all()
+    total = db.scalar(select(func.count()).select_from(InvoiceItem)) or 0
+    return Page[InvoiceItemRead](
+        items=[InvoiceItemRead.model_validate(row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_invoice_item(
+    payload: InvoiceItemCreate,
+    db: DbSession,
+) -> InvoiceItemRead:
+    """`exclude_unset`, so a field left out keeps the column's own default rather
+    than overwriting it with a null."""
+    row = InvoiceItem(**payload.model_dump(exclude_unset=True))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return InvoiceItemRead.model_validate(row)
+
+
+@router.get("/{row_id}", responses=_NOT_FOUND)
+def get_invoice_item(
+    row_id: UUID,
+    db: DbSession,
+) -> InvoiceItemRead:
+    return InvoiceItemRead.model_validate(_get(db, row_id))
+
+
+@router.patch("/{row_id}", responses=_NOT_FOUND)
+def update_invoice_item(
+    row_id: UUID,
+    payload: InvoiceItemUpdate,
+    db: DbSession,
+) -> InvoiceItemRead:
+    """`exclude_unset` again, and here it is the whole point: without it every
+    omitted field arrives as `None` and a PATCH of one column blanks the rest of
+    the row."""
+    row = _get(db, row_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return InvoiceItemRead.model_validate(row)
+
+
+@router.delete("/{row_id}", status_code=status.HTTP_204_NO_CONTENT, responses=_NOT_FOUND)
+def delete_invoice_item(
+    row_id: UUID,
+    db: DbSession,
+) -> None:
+    """A row something else still references raises `IntegrityError` here and
+    leaves as a 409 — see the handler registered in `app/main.py`."""
+    db.delete(_get(db, row_id))
+    db.commit()

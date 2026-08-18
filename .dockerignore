@@ -1,0 +1,24 @@
+# Keep the build context small and — more importantly — keep secrets out of it.
+# Everything sent to the daemon is readable from any layer that COPYs it, so a
+# `.env` that reaches the context reaches the image, and `docker history` shows
+# it to anyone who can pull.
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.git/
+.github/
+
+# Note what is *not* here: `app/`, `tests/`, `migrations/` and `seed/`. The
+# Dockerfile copies the first and the tests are meant to be runnable against a
+# built image, so excluding them would trade a slightly smaller context for a
+# repository whose own test suite cannot be run the way CI would run it.

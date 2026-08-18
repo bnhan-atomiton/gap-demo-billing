@@ -1,0 +1,387 @@
+{
+  "version": "0.1",
+  "app": {
+    "name": "billing",
+    "description": "Customer billing: plans, invoices, line items, payments"
+  },
+  "enums": [
+    {
+      "name": "invoice_status",
+      "values": [
+        "draft",
+        "sent",
+        "paid",
+        "void"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "plans",
+      "primary_key": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "code",
+          "type": "varchar(64)",
+          "nullable": false,
+          "unique": true,
+          "default": null
+        },
+        {
+          "name": "monthly_cents",
+          "type": "int",
+          "nullable": false,
+          "unique": false,
+          "default": "0"
+        },
+        {
+          "name": "seats",
+          "type": "int",
+          "nullable": true,
+          "unique": false,
+          "default": null
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [],
+      "seed": {
+        "count": 4,
+        "columns": {
+          "code": {
+            "strategy": "choice",
+            "values": [
+              "free",
+              "starter",
+              "team",
+              "enterprise"
+            ]
+          },
+          "monthly_cents": {
+            "strategy": "int_range",
+            "from": 0,
+            "to": 250000
+          },
+          "seats": {
+            "strategy": "int_range",
+            "from": 1,
+            "to": 500
+          }
+        }
+      }
+    },
+    {
+      "name": "customers",
+      "primary_key": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "org_name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "billing_email",
+          "type": "text",
+          "nullable": false,
+          "unique": true,
+          "default": null
+        },
+        {
+          "name": "plan_id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "unique": false,
+          "default": "now()"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "plan_id",
+          "references": "plans",
+          "on_delete": "restrict"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        }
+      ],
+      "seed": {
+        "count": 120,
+        "columns": {
+          "org_name": {
+            "strategy": "company"
+          },
+          "billing_email": {
+            "strategy": "email"
+          },
+          "plan_id": {
+            "strategy": "fk"
+          },
+          "created_at": {
+            "strategy": "timestamp_range",
+            "from": "2024-01-01T00:00:00Z",
+            "to": "2026-01-01T00:00:00Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "invoices",
+      "primary_key": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "issued_on",
+          "type": "date",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "enum:invoice_status",
+          "nullable": false,
+          "unique": false,
+          "default": "'draft'"
+        },
+        {
+          "name": "total_cents",
+          "type": "int",
+          "nullable": false,
+          "unique": false,
+          "default": "0"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "customer_id",
+          "references": "customers",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "customer_id",
+            "issued_on"
+          ],
+          "unique": false
+        }
+      ],
+      "seed": {
+        "count": 640,
+        "columns": {
+          "customer_id": {
+            "strategy": "fk"
+          },
+          "issued_on": {
+            "strategy": "date_range",
+            "from": "2024-01-01",
+            "to": "2026-06-30"
+          },
+          "status": {
+            "strategy": "choice",
+            "values": [
+              "draft",
+              "sent",
+              "paid",
+              "void"
+            ]
+          },
+          "total_cents": {
+            "strategy": "int_range",
+            "from": 0,
+            "to": 500000
+          }
+        }
+      }
+    },
+    {
+      "name": "invoice_items",
+      "primary_key": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "invoice_id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "type": "int",
+          "nullable": false,
+          "unique": false,
+          "default": "1"
+        },
+        {
+          "name": "unit_cents",
+          "type": "int",
+          "nullable": false,
+          "unique": false,
+          "default": "0"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "invoice_id",
+          "references": "invoices",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "unique": false
+        }
+      ],
+      "seed": {
+        "count": 2400,
+        "columns": {
+          "invoice_id": {
+            "strategy": "fk"
+          },
+          "description": {
+            "strategy": "sentence"
+          },
+          "qty": {
+            "strategy": "int_range",
+            "from": 1,
+            "to": 20
+          },
+          "unit_cents": {
+            "strategy": "int_range",
+            "from": 100,
+            "to": 50000
+          }
+        }
+      }
+    },
+    {
+      "name": "payments",
+      "primary_key": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "invoice_id",
+          "type": "uuid",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "method",
+          "type": "varchar(32)",
+          "nullable": false,
+          "unique": false,
+          "default": null
+        },
+        {
+          "name": "paid_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "unique": false,
+          "default": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "column": "invoice_id",
+          "references": "invoices",
+          "on_delete": "restrict"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "invoice_id"
+          ],
+          "unique": false
+        }
+      ],
+      "seed": {
+        "count": 580,
+        "columns": {
+          "invoice_id": {
+            "strategy": "fk"
+          },
+          "method": {
+            "strategy": "choice",
+            "values": [
+              "card",
+              "ach",
+              "wire",
+              "credit"
+            ]
+          },
+          "paid_at": {
+            "strategy": "timestamp_range",
+            "from": "2024-01-01T00:00:00Z",
+            "to": "2026-06-30T00:00:00Z"
+          }
+        }
+      }
+    }
+  ]
+}
